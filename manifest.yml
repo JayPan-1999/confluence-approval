@@ -1,0 +1,28 @@
+modules:
+  macro:
+    - key: approval-hello-world-macro
+      resource: main
+      render: native
+      resolver:
+        function: resolver
+      title: approval
+  function:
+    - key: resolver
+      handler: index.handler
+resources:
+  - key: main
+    path: src/frontend/index.jsx
+app:
+  runtime:
+    name: nodejs22.x
+    memoryMB: 256
+    architecture: arm64
+  id: ari:cloud:ecosystem::app/f1c633a8-d7d0-4707-8f89-e9c4cc144fa5
+permissions:
+  scopes:
+    - read:confluence-content.all
+  external:
+    fetch:
+      backend:
+        - https://confluence-plugin-brbrahexd8apfqca.canadacentral-01.azurewebsites.net
+        - https://api-private.atlassian.com
