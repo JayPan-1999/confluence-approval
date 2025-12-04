@@ -11,6 +11,10 @@ resolver.define('getText', (req) => {
 
 // 抽取公共函数，避免重复逻辑
 const sendDecision = async (buttonType, contentId) => {
+  const body = { buttonType, pageId: `${contentId}` };
+
+  const apiKey = process.env.CFT_WEBHOOK_API_KEY;
+
   if (!contentId) {
     return { status: 'error', message: 'No content ID provided' };
   }
@@ -19,9 +23,9 @@ const sendDecision = async (buttonType, contentId) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Automation-Webhook-Token': 'a3f40e1bbbade601fff84a50f3c2c604f60cfe78'
+        'X-Automation-Webhook-Token': apiKey
       },
-      body: JSON.stringify({ buttonType })
+      body: JSON.stringify(body)
     });
 
     if (response.status === 200) {
@@ -47,6 +51,12 @@ resolver.define('approve', async ({ payload }) => {
 resolver.define('reject', async ({ payload }) => {
   const { contentId } = payload || {};
   return sendDecision('reject', contentId);
+});
+
+// 新增 re-review 按钮触发
+resolver.define('re-review', async ({ payload }) => {
+  const { contentId } = payload || {};
+  return sendDecision('re-review', contentId);
 });
 
 export const handler = resolver.getDefinitions();
