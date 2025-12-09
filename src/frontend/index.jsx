@@ -13,16 +13,16 @@ const App = () => {
   // 简单的国际化词典
   const messages = {
     'en': {
-      approve: 'Approval',
+      approve: 'Approve',
       reject: 'Reject',
       submitting: 'Submitting...',
       responseTitle: 'Response',
       close: 'Close',
       confirmTitleApprove: 'Confirm approval',
       confirmTitleReject: 'Confirm rejection',
-      confirmTitleReReview: 'Confirm re-review',
+      confirmTitleReReview: 'Confirm Submit for Internal Review',
       confirmTextApprove: 'Are you sure you want to approve this page?',
-      confirmTextReReview: 'Are you sure you want to request a re-review for this page?',
+      confirmTextReReview: 'Are you sure you want to request a Submit for Internal Review for this page?',
       confirmTextReject: 'Are you sure you want to reject this page?',
       confirm: 'Confirm',
       cancel: 'Cancel'
@@ -76,21 +76,25 @@ const App = () => {
 
   return (
     <>
-      <Inline space="space.100">
-        <Stack alignInline="start">
-          <Button onClick={() => triggerWithConfirm('approve')} disabled={!!loading} appearance="primary">
-            {loading === 'approve' ? i18n.submitting || 'Submitting...' : i18n.approve || 'Approval'}
-          </Button>
-        </Stack>
-        <Stack alignInline="start">
-          <Button onClick={() => triggerWithConfirm('reject')} disabled={!!loading} appearance="danger">
-            {loading === 'reject' ? i18n.submitting || 'Submitting...' : i18n.reject || 'Reject'}
-          </Button>
-        </Stack>
+      <Inline space="space.100" spread='space-between'>
         <Stack alignInline="start">
           <Button onClick={() => triggerWithConfirm('re-review')} disabled={!!loading} appearance="warning">
-            {loading === 're-review' ? i18n.submitting || 'Submitting...' : i18n.reReview || 'Re-review'}
+            {loading === 're-review' ? i18n.submitting || 'Submitting...' : i18n.reReview || 'Submit for Internal Review'}
           </Button>
+        </Stack>
+        <Stack alignInline="start">
+          <Inline space="space.100">
+            <Stack>
+              <Button onClick={() => triggerWithConfirm('approve')} disabled={!!loading} appearance="primary">
+                {loading === 'approve' ? i18n.submitting || 'Submitting...' : i18n.approve || 'Approval'}
+              </Button>
+            </Stack>
+            <Stack>
+              <Button onClick={() => triggerWithConfirm('reject')} disabled={!!loading} appearance="danger">
+                {loading === 'reject' ? i18n.submitting || 'Submitting...' : i18n.reject || 'Reject'}
+              </Button>
+            </Stack>
+          </Inline>
         </Stack>
       </Inline>
 
@@ -100,12 +104,12 @@ const App = () => {
           <Modal onClose={() => setConfirmOpen(false)}>
             <ModalHeader>
               <ModalTitle>
-                {pendingAction === 'approve' ? (i18n.confirmTitleApprove || 'Confirm approval') : (pendingAction === 'reject' ? (i18n.confirmTitleReject || 'Confirm rejection') : (i18n.confirmTitleReReview || 'Confirm re-review'))}
+                {pendingAction === 'approve' ? (i18n.confirmTitleApprove || 'Confirm approval') : (pendingAction === 'reject' ? (i18n.confirmTitleReject || 'Confirm rejection') : (i18n.confirmTitleReReview || 'Confirm Submit for Internal Review'))}
               </ModalTitle>
             </ModalHeader>
             <ModalBody>
               <Text>
-                {pendingAction === 'approve' ? (i18n.confirmTextApprove || 'Are you sure you want to approve this page?') : (pendingAction === 'reject' ? (i18n.confirmTextReject || 'Are you sure you want to reject this page?') : (i18n.confirmTextReReview || 'Are you sure you want to request a re-review for this page?'))}
+                {pendingAction === 'approve' ? (i18n.confirmTextApprove || 'Are you sure you want to approve this page?') : (pendingAction === 'reject' ? (i18n.confirmTextReject || 'Are you sure you want to reject this page?') : (i18n.confirmTextReReview || 'Are you sure you want to request a Submit for Internal Review for this page?'))}
               </Text>
             </ModalBody>
             <ModalFooter>
