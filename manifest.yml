@@ -20,7 +20,9 @@ app:
   id: ari:cloud:ecosystem::app/f1c633a8-d7d0-4707-8f89-e9c4cc144fa5
 permissions:
   scopes:
-    - read:confluence-content.all
+    - read:confluence-space.summary
+    - read:confluence-content.summary
+    - write:confluence-content
   external:
     fetch:
       backend:
