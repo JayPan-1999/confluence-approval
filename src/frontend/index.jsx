@@ -16,12 +16,15 @@ import { States_Enum } from "../constant/index.js";
 
 const App = () => {
     const [approvalResult, setApprovalResult] = useState(null);
-    const [loading, setLoading] = useState(null); // 'approve' | 'reject' | null
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [pendingAction, setPendingAction] = useState(null); // 'approve' | 'reject' | 're-review' | null
-    const [curPageState, setCurPageState] = useState(null);
-    const [isEditing, setIsEditing] = useState(false);
+
+    const [isRereviewDisabled, setIsRereviewDisabled] = useState(true);
+    const [isApprovalDisabled, setIsApprovalDisabled] = useState(true);
+    const [isRejectDisabled, setIsRejectDisabled] = useState(true);
+
+    const [isEditing, setIsEditing] = useState(true);
     const [i18n, setI18n] = useState({});
 
     // 简单的国际化词典
@@ -77,7 +80,6 @@ const App = () => {
     const executeAction = async () => {
         if (!pendingAction) return;
         setConfirmOpen(false);
-        setLoading(pendingAction);
         try {
             const ctx = await view.getContext();
             const contentId = ctx?.extension?.content?.id || ctx?.contentId;
@@ -86,19 +88,27 @@ const App = () => {
             setApprovalResult(res);
             setIsModalOpen(true);
         } finally {
-            setLoading(null);
             setPendingAction(null);
         }
     };
 
     const initCurState = async () => {
         const ctx = await view.getContext();
-        console.log(ctx);
         const contentId = ctx?.extension?.content?.id || ctx?.contentId;
-        console.log(ctx?.extension?.isEditing);
         setIsEditing(ctx?.extension?.isEditing);
         const res = await invoke("getCurState", { contentId });
-        setCurPageState(res);
+        setIsRejectDisabled(
+            [States_Enum.DRAFT, States_Enum.PUBLISHED].includes(res)
+        );
+        setIsRereviewDisabled(
+            [
+                States_Enum.PENDING_ITL_REVIEW,
+                States_Enum.PENDING_BU_REVIEW,
+            ].includes(res)
+        );
+        setIsApprovalDisabled(
+            [States_Enum.DRAFT, States_Enum.PUBLISHED].includes(res)
+        );
     };
 
     return (
@@ -107,17 +117,10 @@ const App = () => {
                 <Stack alignInline="start">
                     <Button
                         onClick={() => triggerWithConfirm("re-review")}
-                        isDisabled={
-                            !!loading ||
-                            isEditing ||
-                            [
-                                States_Enum.PENDING_ITL_REVIEW,
-                                States_Enum.PENDING_BU_REVIEW,
-                            ].includes(curPageState)
-                        }
+                        isDisabled={isEditing || isRereviewDisabled}
                         appearance="warning"
                     >
-                        {loading === "re-review"
+                        {pendingAction === "re-review"
                             ? i18n.submitting || "Submitting..."
                             : i18n.reReview || "Submit for Internal Review"}
                     </Button>
@@ -129,17 +132,10 @@ const App = () => {
                                 onClick={() => {
                                     triggerWithConfirm("approve");
                                 }}
-                                isDisabled={
-                                    !!loading ||
-                                    isEditing ||
-                                    [
-                                        States_Enum.DRAFT,
-                                        States_Enum.PUBLISHED,
-                                    ].includes(curPageState)
-                                }
+                                isDisabled={isEditing || isApprovalDisabled}
                                 appearance="primary"
                             >
-                                {loading === "approve"
+                                {pendingAction === "approve"
                                     ? i18n.submitting || "Submitting..."
                                     : i18n.approve || "Approval"}
                             </Button>
@@ -147,17 +143,10 @@ const App = () => {
                         <Stack>
                             <Button
                                 onClick={() => triggerWithConfirm("reject")}
-                                isDisabled={
-                                    !!loading ||
-                                    isEditing ||
-                                    [
-                                        States_Enum.DRAFT,
-                                        States_Enum.PUBLISHED,
-                                    ].includes(curPageState)
-                                }
+                                isDisabled={isEditing || isRejectDisabled}
                                 appearance="danger"
                             >
-                                {loading === "reject"
+                                {pendingAction === "reject"
                                     ? i18n.submitting || "Submitting..."
                                     : i18n.reject || "Reject"}
                             </Button>
@@ -165,13 +154,6 @@ const App = () => {
                     </Inline>
                 </Stack>
             </Inline>
-            {/* <Stack alignInline="start">
-        <Button onClick={() => {
-          window.location.href = authUrl;
-        }} disabled={!!loading} appearance="warning">
-          Redirect
-        </Button>
-      </Stack> */}
             {/* 二次确认弹窗 */}
             <ModalTransition>
                 {confirmOpen && (

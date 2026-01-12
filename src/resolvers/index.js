@@ -2,18 +2,23 @@ import Resolver from "@forge/resolver";
 import api, { route } from "@forge/api";
 import { States_Enum } from "../constant/index.js";
 
-// const States_Enum = {
-//     DRAFT: "Draft",
-//     PENDING_ITL_REVIEW: "Pending JSC Review",
-//     PENDING_BU_REVIEW: "Pending BU Review",
-//     PUBLISHED: "Published",
-// };
-
 const resolver = new Resolver();
 
 // 抽取公共函数，避免重复逻辑
-const sendDecision = async (buttonType, contentId, spaceKey) => {
-    const body = { pageId: `${contentId}`, spaceKey, buttonType };
+const sendDecision = async (
+    buttonType,
+    contentId,
+    spaceKey,
+    originState,
+    authorName
+) => {
+    const body = {
+        pageId: `${contentId}`,
+        spaceKey,
+        buttonType,
+        originState,
+        authorName,
+    };
 
     const apiKey = process.env.CFT_WEBHOOK_API_KEY;
 
@@ -57,13 +62,13 @@ const sendDecision = async (buttonType, contentId, spaceKey) => {
 };
 
 // approve 按钮触发
-resolver.define("approve", async ({ payload }) => {
+resolver.define("approve", async ({ payload, context }) => {
     const { contentId, spaceKey } = payload || {};
     const { data } = await getPageStatus(contentId);
-    const curState = handleStatusChange(
-        data?.contentState?.name,
-        "approve"
-    )?.newStatus;
+    const originState = data?.contentState?.name;
+    const curState = handleStatusChange(originState, "approve")?.newStatus;
+    const accountId = context?.accountId;
+    const authorName = await getCurrentUser(accountId);
     await changePageStatus({
         payload: {
             pageId: contentId,
@@ -72,7 +77,13 @@ resolver.define("approve", async ({ payload }) => {
             buttonType: "approve",
         },
     });
-    return sendDecision("approve", contentId, spaceKey);
+    return sendDecision(
+        "approve",
+        contentId,
+        spaceKey,
+        originState,
+        authorName
+    );
 });
 
 // 获取当前状态
@@ -83,13 +94,13 @@ resolver.define("getCurState", async ({ payload }) => {
 });
 
 // 新增 reject 按钮触发
-resolver.define("reject", async ({ payload }) => {
+resolver.define("reject", async ({ payload, context }) => {
     const { contentId, spaceKey } = payload || {};
     const { data } = await getPageStatus(contentId);
-    const curState = handleStatusChange(
-        data?.contentState?.name,
-        "reject"
-    )?.newStatus;
+    const originState = data?.contentState?.name;
+    const curState = handleStatusChange(originState, "reject")?.newStatus;
+    const accountId = context?.accountId;
+    const authorName = await getCurrentUser(accountId);
     await changePageStatus({
         payload: {
             pageId: contentId,
@@ -98,17 +109,31 @@ resolver.define("reject", async ({ payload }) => {
             buttonType: "reject",
         },
     });
-    return sendDecision("reject", contentId, spaceKey);
+    return sendDecision("reject", contentId, spaceKey, originState, authorName);
 });
 
+// 获取当前用户名
+const getCurrentUser = async (accountId) => {
+    const res = await api
+        .asUser()
+        .requestConfluence(
+            route`/wiki/rest/api/user?accountId=${accountId}&expand=details`
+        );
+    if (!res.ok) {
+        throw new Error(`Failed to get user: ${res.status} ${res.statusText}`);
+    }
+    const user = await res.json();
+    return user.displayName;
+};
+
 // 新增 re-review 按钮触发
-resolver.define("re-review", async ({ payload }) => {
+resolver.define("re-review", async ({ payload, context }) => {
     const { contentId, spaceKey } = payload || {};
     const { data } = await getPageStatus(contentId);
-    const curState = handleStatusChange(
-        data?.contentState?.name,
-        "re-review"
-    )?.newStatus;
+    const originState = data?.contentState?.name;
+    const curState = handleStatusChange(originState, "re-review")?.newStatus;
+    const accountId = context?.accountId;
+    const authorName = await getCurrentUser(accountId);
     await changePageStatus({
         payload: {
             pageId: contentId,
@@ -117,7 +142,13 @@ resolver.define("re-review", async ({ payload }) => {
             buttonType: "re-review",
         },
     });
-    return sendDecision("re-review", contentId, spaceKey);
+    return sendDecision(
+        "re-review",
+        contentId,
+        spaceKey,
+        originState,
+        authorName
+    );
 });
 
 const getAllPageStates = async (spaceKey) => {

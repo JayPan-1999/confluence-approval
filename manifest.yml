@@ -23,6 +23,7 @@ permissions:
     - read:confluence-space.summary
     - read:confluence-content.summary
     - write:confluence-content
+    - read:confluence-user
   external:
     fetch:
       backend:
