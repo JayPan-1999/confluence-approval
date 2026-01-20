@@ -38,7 +38,7 @@ jobs:
           FORGE_EMAIL: ${{ secrets.FORGE_EMAIL }}
           FORGE_API_TOKEN: ${{ secrets.FORGE_API_TOKEN }}
         run: |
-          forge login --non-interactive --email "$FORGE_EMAIL" --api-token "$FORGE_API_TOKEN"
+          forge login --email "$FORGE_EMAIL" --token "$FORGE_API_TOKEN"
 
       # Step 6: Run linting and tests to ensure code quality
       - name: Lint & Test
