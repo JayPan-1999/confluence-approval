@@ -6,7 +6,7 @@ name: Deploy Forge App to development
 on:
   push:
     branches:
-      - master
+      - develop
 
 jobs:
   deploy:
