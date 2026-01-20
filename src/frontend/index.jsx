@@ -98,16 +98,16 @@ const App = () => {
         setIsEditing(ctx?.extension?.isEditing);
         const res = await invoke("getCurState", { contentId });
         setIsRejectDisabled(
-            [States_Enum.DRAFT, States_Enum.PUBLISHED].includes(res)
+            [States_Enum.DRAFT, States_Enum.PUBLISHED].includes(res),
         );
         setIsRereviewDisabled(
             [
                 States_Enum.PENDING_ITL_REVIEW,
                 States_Enum.PENDING_BU_REVIEW,
-            ].includes(res)
+            ].includes(res),
         );
         setIsApprovalDisabled(
-            [States_Enum.DRAFT, States_Enum.PUBLISHED].includes(res)
+            [States_Enum.DRAFT, States_Enum.PUBLISHED].includes(res),
         );
     };
 
@@ -115,7 +115,7 @@ const App = () => {
         <>
             <Inline space="space.100" spread="space-between">
                 <Stack alignInline="start">
-                    <Button
+                    {/* <Button
                         onClick={() => triggerWithConfirm("re-review")}
                         isDisabled={isEditing || isRereviewDisabled}
                         appearance="warning"
@@ -123,7 +123,7 @@ const App = () => {
                         {pendingAction === "re-review"
                             ? i18n.submitting || "Submitting..."
                             : i18n.reReview || "Submit for Internal Review"}
-                    </Button>
+                    </Button> */}
                 </Stack>
                 <Stack alignInline="start">
                     <Inline space="space.100">
@@ -164,10 +164,10 @@ const App = () => {
                                     ? i18n.confirmTitleApprove ||
                                       "Confirm approval"
                                     : pendingAction === "reject"
-                                    ? i18n.confirmTitleReject ||
-                                      "Confirm rejection"
-                                    : i18n.confirmTitleReReview ||
-                                      "Confirm Submit for Internal Review"}
+                                      ? i18n.confirmTitleReject ||
+                                        "Confirm rejection"
+                                      : i18n.confirmTitleReReview ||
+                                        "Confirm Submit for Internal Review"}
                             </ModalTitle>
                         </ModalHeader>
                         <ModalBody>
@@ -176,10 +176,10 @@ const App = () => {
                                     ? i18n.confirmTextApprove ||
                                       "Are you sure you want to approve this page?"
                                     : pendingAction === "reject"
-                                    ? i18n.confirmTextReject ||
-                                      "Are you sure you want to reject this page?"
-                                    : i18n.confirmTextReReview ||
-                                      "Are you sure you want to request a Submit for Internal Review for this page?"}
+                                      ? i18n.confirmTextReject ||
+                                        "Are you sure you want to reject this page?"
+                                      : i18n.confirmTextReReview ||
+                                        "Are you sure you want to request a Submit for Internal Review for this page?"}
                             </Text>
                         </ModalBody>
                         <ModalFooter>
@@ -234,5 +234,5 @@ const App = () => {
 ForgeReconciler.render(
     <React.StrictMode>
         <App />
-    </React.StrictMode>
+    </React.StrictMode>,
 );

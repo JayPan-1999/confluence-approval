@@ -32,7 +32,21 @@ jobs:
       - name: Install Forge CLI
         run: npm install -g @forge/cli
 
-      # Step 5: Upgrade the app installation in production
+      # Step 5: Login to Forge using environment variables for authentication
+      - name: Forge Login (CI)
+        env:
+          FORGE_EMAIL: ${{ secrets.FORGE_EMAIL }}
+          FORGE_API_TOKEN: ${{ secrets.FORGE_API_TOKEN }}
+        run: |
+          forge login --non-interactive --email "$FORGE_EMAIL" --api-token "$FORGE_API_TOKEN"
+
+      # Step 6: Run linting and tests to ensure code quality
+      - name: Lint & Test
+        run: |
+          npm run lint --if-present
+          npm test --if-present
+
+      # Step 7: Upgrade the app installation in production
       # Note: FORGE_EMAIL and FORGE_API_TOKEN environment variables 
       # are used automatically by Forge CLI for authentication
       - name: Upgrade Forge App Installation
@@ -41,9 +55,54 @@ jobs:
           FORGE_API_TOKEN: ${{ secrets.FORGE_API_TOKEN }}
         run: forge install --upgrade --non-interactive --environment production --site ${{ secrets.ATLASSIAN_SITE }} --product confluence
 
-      # Step 6: Deploy the app to production environment
+      # Step 8: Deploy the app to production environment
       - name: Deploy to Production
         env:
           FORGE_EMAIL: ${{ secrets.FORGE_EMAIL }}
           FORGE_API_TOKEN: ${{ secrets.FORGE_API_TOKEN }}
         run: forge deploy --non-interactive --environment production
+
+
+# name: Forge CI/CD
+
+# on:
+#   push:
+#     branches: [ main ]
+
+# jobs:
+#   build-and-deploy:
+#     runs-on: ubuntu-latest
+
+#     steps:
+#       - name: Checkout
+#         uses: actions/checkout@v4
+
+#       - name: Setup Node
+#         uses: actions/setup-node@v4
+#         with:
+#           node-version: '20'
+
+#       - name: Install dependencies
+#         run: |
+#           npm ci
+
+#       - name: Install Forge CLI
+#         run: |
+#           npm install -g @forge/cli
+
+#       - name: Forge Login (CI)
+#         env:
+#           FORGE_EMAIL: ${{ secrets.FORGE_EMAIL }}
+#           FORGE_API_TOKEN: ${{ secrets.FORGE_API_TOKEN }}
+#         run: |
+#           forge login --non-interactive --email "$FORGE_EMAIL" --api-token "$FORGE_API_TOKEN"
+
+#       - name: Lint & Test
+#         run: |
+#           npm run lint --if-present
+#           npm test --if-present
+
+#       - name: Deploy to development on main push
+#         if: github.ref == 'refs/heads/main'
+#         run: |
+#           forge deploy --environment development --non-interactive
