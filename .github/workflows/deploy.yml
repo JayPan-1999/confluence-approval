@@ -1,0 +1,49 @@
+# GitHub Actions workflow for deploying Forge app to production
+# Triggered when code is pushed to the master branch
+
+name: Deploy Forge App to Production
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      # Step 1: Checkout the repository code
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Step 2: Setup Node.js environment (Forge CLI requires Node.js)
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # Step 3: Install project dependencies
+      - name: Install dependencies
+        run: npm ci
+
+      # Step 4: Install Forge CLI globally
+      - name: Install Forge CLI
+        run: npm install -g @forge/cli
+
+      # Step 5: Upgrade the app installation in production
+      # Note: FORGE_EMAIL and FORGE_API_TOKEN environment variables 
+      # are used automatically by Forge CLI for authentication
+      - name: Upgrade Forge App Installation
+        env:
+          FORGE_EMAIL: ${{ secrets.FORGE_EMAIL }}
+          FORGE_API_TOKEN: ${{ secrets.FORGE_API_TOKEN }}
+        run: forge install --upgrade --non-interactive --environment production --site ${{ secrets.ATLASSIAN_SITE }} --product confluence
+
+      # Step 6: Deploy the app to production environment
+      - name: Deploy to Production
+        env:
+          FORGE_EMAIL: ${{ secrets.FORGE_EMAIL }}
+          FORGE_API_TOKEN: ${{ secrets.FORGE_API_TOKEN }}
+        run: forge deploy --non-interactive --environment production
