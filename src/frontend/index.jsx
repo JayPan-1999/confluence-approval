@@ -84,7 +84,12 @@ const App = () => {
             const ctx = await view.getContext();
             const contentId = ctx?.extension?.content?.id || ctx?.contentId;
             const spaceKey = ctx?.extension?.space?.key;
-            const res = await invoke(pendingAction, { contentId, spaceKey });
+            const pageUrl = ctx?.extension?.location || "";
+            const res = await invoke(pendingAction, {
+                contentId,
+                spaceKey,
+                pageUrl,
+            });
             setApprovalResult(res);
             setIsModalOpen(true);
         } finally {
@@ -104,6 +109,7 @@ const App = () => {
             [
                 States_Enum.PENDING_ITL_REVIEW,
                 States_Enum.PENDING_BU_REVIEW,
+                States_Enum.PUBLISHED,
             ].includes(res),
         );
         setIsApprovalDisabled(
@@ -115,7 +121,7 @@ const App = () => {
         <>
             <Inline space="space.100" spread="space-between">
                 <Stack alignInline="start">
-                    {/* <Button
+                    <Button
                         onClick={() => triggerWithConfirm("re-review")}
                         isDisabled={isEditing || isRereviewDisabled}
                         appearance="warning"
@@ -123,7 +129,7 @@ const App = () => {
                         {pendingAction === "re-review"
                             ? i18n.submitting || "Submitting..."
                             : i18n.reReview || "Submit for Internal Review"}
-                    </Button> */}
+                    </Button>
                 </Stack>
                 <Stack alignInline="start">
                     <Inline space="space.100">

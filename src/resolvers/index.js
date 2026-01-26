@@ -10,7 +10,8 @@ const sendDecision = async (
     contentId,
     spaceKey,
     originState,
-    authorName
+    authorName,
+    pageUrl,
 ) => {
     const body = {
         pageId: `${contentId}`,
@@ -18,6 +19,7 @@ const sendDecision = async (
         buttonType,
         originState,
         authorName,
+        pageUrl,
     };
 
     const apiKey = process.env.CFT_WEBHOOK_API_KEY;
@@ -35,7 +37,7 @@ const sendDecision = async (
                     "X-Automation-Webhook-Token": apiKey,
                 },
                 body: JSON.stringify(body),
-            }
+            },
         );
 
         if (response.status === 200) {
@@ -48,7 +50,7 @@ const sendDecision = async (
             console.error(
                 "Webhook request failed:",
                 response.status,
-                errorText
+                errorText,
             );
             return {
                 status: "error",
@@ -63,7 +65,7 @@ const sendDecision = async (
 
 // approve 按钮触发
 resolver.define("approve", async ({ payload, context }) => {
-    const { contentId, spaceKey } = payload || {};
+    const { contentId, spaceKey, pageUrl } = payload || {};
     const { data } = await getPageStatus(contentId);
     const originState = data?.contentState?.name;
     const curState = handleStatusChange(originState, "approve")?.newStatus;
@@ -82,7 +84,8 @@ resolver.define("approve", async ({ payload, context }) => {
         contentId,
         spaceKey,
         originState,
-        authorName
+        authorName,
+        pageUrl,
     );
 });
 
@@ -95,7 +98,7 @@ resolver.define("getCurState", async ({ payload }) => {
 
 // 新增 reject 按钮触发
 resolver.define("reject", async ({ payload, context }) => {
-    const { contentId, spaceKey } = payload || {};
+    const { contentId, spaceKey, pageUrl } = payload || {};
     const { data } = await getPageStatus(contentId);
     const originState = data?.contentState?.name;
     const curState = handleStatusChange(originState, "reject")?.newStatus;
@@ -109,7 +112,14 @@ resolver.define("reject", async ({ payload, context }) => {
             buttonType: "reject",
         },
     });
-    return sendDecision("reject", contentId, spaceKey, originState, authorName);
+    return sendDecision(
+        "reject",
+        contentId,
+        spaceKey,
+        originState,
+        authorName,
+        pageUrl,
+    );
 });
 
 // 获取当前用户名
@@ -117,7 +127,7 @@ const getCurrentUser = async (accountId) => {
     const res = await api
         .asUser()
         .requestConfluence(
-            route`/wiki/rest/api/user?accountId=${accountId}&expand=details`
+            route`/wiki/rest/api/user?accountId=${accountId}&expand=details`,
         );
     if (!res.ok) {
         throw new Error(`Failed to get user: ${res.status} ${res.statusText}`);
@@ -128,7 +138,7 @@ const getCurrentUser = async (accountId) => {
 
 // 新增 re-review 按钮触发
 resolver.define("re-review", async ({ payload, context }) => {
-    const { contentId, spaceKey } = payload || {};
+    const { contentId, spaceKey, pageUrl } = payload || {};
     const { data } = await getPageStatus(contentId);
     const originState = data?.contentState?.name;
     const curState = handleStatusChange(originState, "re-review")?.newStatus;
@@ -147,7 +157,8 @@ resolver.define("re-review", async ({ payload, context }) => {
         contentId,
         spaceKey,
         originState,
-        authorName
+        authorName,
+        pageUrl,
     );
 });
 
@@ -159,7 +170,7 @@ const getAllPageStates = async (spaceKey) => {
         const res = await api
             .asUser()
             .requestConfluence(
-                route`/wiki/rest/api/space/${spaceKey}/state/settings`
+                route`/wiki/rest/api/space/${spaceKey}/state/settings`,
             );
 
         if (!res.ok) {
@@ -200,7 +211,7 @@ const changePageStatus = async ({ payload }) => {
         const { data: newData } = await getAllPageStates(spaceKey);
         const { spaceContentStates } = newData || {};
         const id = spaceContentStates.find(
-            (state) => state.name.toLowerCase() === curState.toLowerCase()
+            (state) => state.name.toLowerCase() === curState.toLowerCase(),
         )?.id;
         const res = await api
             .asUser()
@@ -214,7 +225,7 @@ const changePageStatus = async ({ payload }) => {
                     body: JSON.stringify({
                         id,
                     }),
-                }
+                },
             );
 
         if (!res.ok) {
