@@ -4,6 +4,56 @@ import { States_Enum } from "../constant/index.js";
 
 const resolver = new Resolver();
 
+const isTransientNetworkError = (error) => {
+    const message = error?.message || "";
+    const causeCode = error?.cause?.code || "";
+
+    return (
+        causeCode === "ECONNRESET" ||
+        causeCode === "ETIMEDOUT" ||
+        causeCode === "ECONNREFUSED" ||
+        message.includes("fetch failed")
+    );
+};
+
+const isAuthenticationScopeError = (error) => {
+    const message = error?.message || "";
+
+    return (
+        error?.status === 401 &&
+        (error?.serviceKey === "atlassian-token-service-key" ||
+            message.includes("NEEDS_AUTHENTICATION_ERR") ||
+            message.includes("Authentication Required"))
+    );
+};
+
+const requestConfluenceWithRetry = async (
+    requestFactory,
+    label,
+    maxAttempts = 3,
+) => {
+    let lastError;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        try {
+            return await requestFactory();
+        } catch (error) {
+            lastError = error;
+
+            if (!isTransientNetworkError(error) || attempt === maxAttempts) {
+                break;
+            }
+
+            console.warn(
+                `${label} transient failure, retrying ${attempt}/${maxAttempts}:`,
+                error?.cause?.code || error?.message || error,
+            );
+        }
+    }
+
+    throw lastError;
+};
+
 // 抽取公共函数，避免重复逻辑
 const sendDecision = async (
     buttonType,
@@ -98,7 +148,7 @@ resolver.define("getCurState", async ({ payload }) => {
 
 // 新增 reject 按钮触发
 resolver.define("reject", async ({ payload, context }) => {
-    const { contentId, spaceKey, pageUrl } = payload || {};
+    const { contentId, spaceKey, pageUrl, rejectComment } = payload || {};
     const { data } = await getPageStatus(contentId);
     const originState = data?.contentState?.name;
     const curState = handleStatusChange(originState, "reject")?.newStatus;
@@ -112,7 +162,18 @@ resolver.define("reject", async ({ payload, context }) => {
             buttonType: "reject",
         },
     });
-    return sendDecision(
+
+    let versionCommentResult = { status: "success" };
+
+    // 如果有拒绝理由，更新页面版本备注以在 version history 中显示
+    if (rejectComment) {
+        versionCommentResult = await addVersionComment(
+            contentId,
+            rejectComment,
+        );
+    }
+
+    const decisionResult = await sendDecision(
         "reject",
         contentId,
         spaceKey,
@@ -120,15 +181,29 @@ resolver.define("reject", async ({ payload, context }) => {
         authorName,
         pageUrl,
     );
+
+    if (versionCommentResult.status === "error") {
+        return {
+            ...decisionResult,
+            status: "error",
+            message: `Reject succeeded, but version history comment was not written: ${versionCommentResult.message}`,
+        };
+    }
+
+    return decisionResult;
 });
 
 // 获取当前用户名
 const getCurrentUser = async (accountId) => {
-    const res = await api
-        .asUser()
-        .requestConfluence(
-            route`/wiki/rest/api/user?accountId=${accountId}&expand=details`,
-        );
+    const res = await requestConfluenceWithRetry(
+        () =>
+            api
+                .asUser()
+                .requestConfluence(
+                    route`/wiki/rest/api/user?accountId=${accountId}&expand=details`,
+                ),
+        "getCurrentUser",
+    );
     if (!res.ok) {
         throw new Error(`Failed to get user: ${res.status} ${res.statusText}`);
     }
@@ -162,16 +237,240 @@ resolver.define("re-review", async ({ payload, context }) => {
     );
 });
 
+/**
+ * 将拒绝理由写入页面版本历史（Version History）
+ * 通过 PUT 更新页面内容并设置 version.message 来实现
+ * Confluence 的 version history 会记录每次内容变更时的 version.message
+ *
+ * @param {string} pageId - 页面 ID
+ * @param {string} rejectComment - 拒绝理由
+ */
+const addVersionComment = async (pageId, rejectComment) => {
+    try {
+        const versionMessage = `[Rejected] ${rejectComment}`;
+
+        // 先走 v1 content 接口。老页面这条链路通常更稳。
+        const v1GetRes = await requestConfluenceWithRetry(
+            () =>
+                api
+                    .asUser()
+                    .requestConfluence(
+                        route`/wiki/rest/api/content/${pageId}?expand=body.storage,version,space,ancestors`,
+                    ),
+            "addVersionComment.v1.get",
+        );
+
+        if (v1GetRes.ok) {
+            const page = await v1GetRes.json();
+            const currentVersion = page.version?.number || 1;
+            const pageTitle = page.title;
+            const spaceKey = page.space?.key;
+            const status = page.status;
+            const ancestors = page.ancestors || [];
+            const bodyValue = page.body?.storage?.value ?? "<p></p>";
+
+            const v1PutRes = await requestConfluenceWithRetry(
+                () =>
+                    api
+                        .asUser()
+                        .requestConfluence(
+                            route`/wiki/rest/api/content/${pageId}`,
+                            {
+                                method: "PUT",
+                                headers: {
+                                    "Content-Type": "application/json",
+                                    Accept: "application/json",
+                                },
+                                body: JSON.stringify({
+                                    id: pageId,
+                                    type: page.type || "page",
+                                    status,
+                                    title: pageTitle,
+                                    space: {
+                                        key: spaceKey,
+                                    },
+                                    ancestors: ancestors.map((ancestor) => ({
+                                        id: ancestor.id,
+                                    })),
+                                    body: {
+                                        storage: {
+                                            value: bodyValue,
+                                            representation: "storage",
+                                        },
+                                    },
+                                    version: {
+                                        number: currentVersion + 1,
+                                        message: versionMessage,
+                                    },
+                                }),
+                            },
+                        ),
+                "addVersionComment.v1.put",
+            );
+
+            if (!v1PutRes.ok) {
+                const errorText = await v1PutRes.text();
+                console.error(
+                    "Failed to add version comment via v1:",
+                    v1PutRes.status,
+                    errorText,
+                );
+                return {
+                    status: "error",
+                    message: `update page failed with status ${v1PutRes.status}`,
+                };
+            }
+
+            const updatedPage = await v1PutRes.json();
+            if (updatedPage?.version?.message !== versionMessage) {
+                console.error(
+                    "Version comment mismatch after v1 update:",
+                    updatedPage?.version?.message,
+                );
+                return {
+                    status: "error",
+                    message: "Confluence did not persist the version message",
+                };
+            }
+
+            console.log(
+                `Version comment added successfully via v1 for page ${pageId}`,
+            );
+            return { status: "success" };
+        }
+
+        const v1ErrorText = await v1GetRes.text();
+
+        // 410 Gone 一般说明当前对象不是传统 content v1 能读取的页面，
+        // 比如 live page。这里回退到 v2 page 接口。
+        if (v1GetRes.status !== 410) {
+            console.error(
+                "Failed to get page for version comment via v1:",
+                v1GetRes.status,
+                v1ErrorText,
+            );
+            return {
+                status: "error",
+                message: `load page failed with status ${v1GetRes.status}`,
+            };
+        }
+
+        const v2GetRes = await requestConfluenceWithRetry(
+            () =>
+                api
+                    .asUser()
+                    .requestConfluence(
+                        route`/wiki/api/v2/pages/${pageId}?body-format=storage&include-version=true`,
+                    ),
+            "addVersionComment.v2.get",
+        );
+
+        if (!v2GetRes.ok) {
+            const errorText = await v2GetRes.text();
+            console.error(
+                "Failed to get page for version comment via v2:",
+                v2GetRes.status,
+                errorText,
+            );
+            return {
+                status: "error",
+                message: `load page via v2 failed with status ${v2GetRes.status}`,
+            };
+        }
+
+        const page = await v2GetRes.json();
+        const currentVersion = page.version?.number || 1;
+        const bodyValue = page.body?.storage?.value ?? "<p></p>";
+
+        const v2PutRes = await requestConfluenceWithRetry(
+            () =>
+                api
+                    .asUser()
+                    .requestConfluence(route`/wiki/api/v2/pages/${pageId}`, {
+                        method: "PUT",
+                        headers: {
+                            "Content-Type": "application/json",
+                            Accept: "application/json",
+                        },
+                        body: JSON.stringify({
+                            id: pageId,
+                            status: page.status,
+                            title: page.title,
+                            spaceId: page.spaceId,
+                            parentId: page.parentId,
+                            ownerId: page.ownerId,
+                            subtype: page.subtype,
+                            body: {
+                                representation: "storage",
+                                value: bodyValue,
+                            },
+                            version: {
+                                number: currentVersion + 1,
+                                message: versionMessage,
+                            },
+                        }),
+                    }),
+            "addVersionComment.v2.put",
+        );
+
+        if (!v2PutRes.ok) {
+            const errorText = await v2PutRes.text();
+            console.error(
+                "Failed to add version comment via v2:",
+                v2PutRes.status,
+                errorText,
+            );
+            return {
+                status: "error",
+                message: `update page via v2 failed with status ${v2PutRes.status}`,
+            };
+        }
+
+        const updatedPage = await v2PutRes.json();
+        if (updatedPage?.version?.message !== versionMessage) {
+            console.error(
+                "Version comment mismatch after v2 update:",
+                updatedPage?.version?.message,
+            );
+            return {
+                status: "error",
+                message: "Confluence did not persist the version message",
+            };
+        }
+
+        console.log(
+            `Version comment added successfully via v2 for page ${pageId}`,
+        );
+        return { status: "success" };
+    } catch (error) {
+        console.error("Error adding version comment:", error);
+
+        if (isAuthenticationScopeError(error)) {
+            return {
+                status: "error",
+                message:
+                    "missing granted page scopes for the current installation; deploy the app and run forge install --upgrade for this environment before retrying",
+            };
+        }
+
+        return { status: "error", message: "request failed" };
+    }
+};
+
 const getAllPageStates = async (spaceKey) => {
     if (!spaceKey) {
         return { status: "error", message: "spaceKey is required" };
     }
     try {
-        const res = await api
-            .asUser()
-            .requestConfluence(
-                route`/wiki/rest/api/space/${spaceKey}/state/settings`,
-            );
+        const res = await requestConfluenceWithRetry(
+            () =>
+                api
+                    .asUser()
+                    .requestConfluence(
+                        route`/wiki/rest/api/space/${spaceKey}/state/settings`,
+                    ),
+            "getAllPageStates",
+        );
 
         if (!res.ok) {
             const text = await res.text();
@@ -188,9 +487,15 @@ const getAllPageStates = async (spaceKey) => {
 
 const getPageStatus = async (pageId) => {
     try {
-        const res = await api
-            .asUser()
-            .requestConfluence(route`/wiki/rest/api/content/${pageId}/state`);
+        const res = await requestConfluenceWithRetry(
+            () =>
+                api
+                    .asUser()
+                    .requestConfluence(
+                        route`/wiki/rest/api/content/${pageId}/state`,
+                    ),
+            "getPageStatus",
+        );
 
         if (!res.ok) {
             const text = await res.text();
@@ -213,20 +518,24 @@ const changePageStatus = async ({ payload }) => {
         const id = spaceContentStates.find(
             (state) => state.name.toLowerCase() === curState.toLowerCase(),
         )?.id;
-        const res = await api
-            .asUser()
-            .requestConfluence(
-                route`/wiki/rest/api/content/${pageId}/state?status=current`,
-                {
-                    method: "PUT",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({
-                        id,
-                    }),
-                },
-            );
+        const res = await requestConfluenceWithRetry(
+            () =>
+                api
+                    .asUser()
+                    .requestConfluence(
+                        route`/wiki/rest/api/content/${pageId}/state?status=current`,
+                        {
+                            method: "PUT",
+                            headers: {
+                                "Content-Type": "application/json",
+                            },
+                            body: JSON.stringify({
+                                id,
+                            }),
+                        },
+                    ),
+            "changePageStatus",
+        );
 
         if (!res.ok) {
             const text = await res.text();

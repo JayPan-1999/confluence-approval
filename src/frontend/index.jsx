@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import ForgeReconciler, {
     Text,
     Button,
@@ -10,6 +10,8 @@ import ForgeReconciler, {
     ModalFooter,
     ModalTitle,
     Stack,
+    Textfield,
+    HelperMessage,
 } from "@forge/react";
 import { invoke, view } from "@forge/bridge";
 import { States_Enum } from "../constant/index.js";
@@ -19,6 +21,8 @@ const App = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [pendingAction, setPendingAction] = useState(null); // 'approve' | 'reject' | 're-review' | null
+    const [commentError, setCommentError] = useState(false); // 拒绝理由必填校验
+    const rejectCommentRef = useRef(""); // 拒绝理由
 
     const [isRereviewDisabled, setIsRereviewDisabled] = useState(true);
     const [isApprovalDisabled, setIsApprovalDisabled] = useState(true);
@@ -42,6 +46,9 @@ const App = () => {
             confirmTextReReview:
                 "Are you sure you want to request a Submit for Internal Review for this page?",
             confirmTextReject: "Are you sure you want to reject this page?",
+            rejectReasonLabel: "Reject Reason",
+            rejectReasonPlaceholder: "Enter the reason for rejection...",
+            rejectReasonRequired: "Reject reason is required.",
             confirm: "Confirm",
             cancel: "Cancel",
         },
@@ -57,6 +64,9 @@ const App = () => {
             confirmTextApprove: "确定要通过该页面吗？",
             confirmTextReReview: "确定要请求重新审核该页面吗？",
             confirmTextReject: "确定要拒绝该页面吗？",
+            rejectReasonLabel: "拒绝理由",
+            rejectReasonPlaceholder: "请输入拒绝理由...",
+            rejectReasonRequired: "拒绝理由为必填项。",
             confirm: "确认",
             cancel: "取消",
         },
@@ -73,13 +83,26 @@ const App = () => {
     }, []);
 
     const triggerWithConfirm = async (type) => {
+        if (type === "reject") {
+            rejectCommentRef.current = "";
+            setCommentError(false);
+        }
         setPendingAction(type);
         setConfirmOpen(true);
     };
 
     const executeAction = async () => {
         if (!pendingAction) return;
+        const rejectComment = rejectCommentRef.current.trim();
+
+        // 拒绝操作必须填写拒绝理由
+        if (pendingAction === "reject" && !rejectComment) {
+            setCommentError(true);
+            return;
+        }
+
         setConfirmOpen(false);
+        setCommentError(false);
         try {
             const ctx = await view.getContext();
             const contentId = ctx?.extension?.content?.id || ctx?.contentId;
@@ -89,9 +112,12 @@ const App = () => {
                 contentId,
                 spaceKey,
                 pageUrl,
+                // 拒绝时传递拒绝理由到后端
+                ...(pendingAction === "reject" && { rejectComment }),
             });
             setApprovalResult(res);
             setIsModalOpen(true);
+            rejectCommentRef.current = "";
         } finally {
             setPendingAction(null);
         }
@@ -187,6 +213,40 @@ const App = () => {
                                       : i18n.confirmTextReReview ||
                                         "Are you sure you want to request a Submit for Internal Review for this page?"}
                             </Text>
+                            {/* 拒绝操作时显示拒绝理由输入框 */}
+                            {pendingAction === "reject" && (
+                                <Stack space="space.100">
+                                    <Textfield
+                                        key={
+                                            pendingAction === "reject"
+                                                ? "reject-comment"
+                                                : "action-comment"
+                                        }
+                                        label={
+                                            i18n.rejectReasonLabel ||
+                                            "Reject Reason"
+                                        }
+                                        placeholder={
+                                            i18n.rejectReasonPlaceholder ||
+                                            "Enter the reason for rejection..."
+                                        }
+                                        defaultValue=""
+                                        onChange={(e) => {
+                                            rejectCommentRef.current =
+                                                e?.target?.value ?? e ?? "";
+                                            if (commentError)
+                                                setCommentError(false);
+                                        }}
+                                        isRequired
+                                    />
+                                    {commentError && (
+                                        <HelperMessage appearance="error">
+                                            {i18n.rejectReasonRequired ||
+                                                "Reject reason is required."}
+                                        </HelperMessage>
+                                    )}
+                                </Stack>
+                            )}
                         </ModalBody>
                         <ModalFooter>
                             <Button onClick={() => setConfirmOpen(false)}>

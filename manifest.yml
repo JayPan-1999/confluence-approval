@@ -24,8 +24,10 @@ permissions:
     - read:confluence-content.summary
     - write:confluence-content
     - read:confluence-user
+    - read:page:confluence
+    - write:page:confluence
   external:
     fetch:
       backend:
-        - https://confluence-plugin-brbrahexd8apfqca.canadacentral-01.azurewebsites.net
-        - https://api-private.atlassian.com
+        - address: https://confluence-plugin-brbrahexd8apfqca.canadacentral-01.azurewebsites.net
+        - address: https://api-private.atlassian.com
