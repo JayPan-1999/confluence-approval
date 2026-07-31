@@ -1,6 +1,8 @@
 modules:
   macro:
     - key: approval-hello-world-macro
+      unlicensedAccess:
+        - unlicensed
       resource: main
       render: native
       resolver:
