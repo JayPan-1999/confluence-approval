@@ -21,7 +21,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
 
       # Step 3: Install project dependencies
@@ -30,7 +30,7 @@ jobs:
 
       # Step 4: Install Forge CLI globally
       - name: Install Forge CLI
-        run: npm install -g @forge/cli
+        run: npm install -g @forge/cli@latest
 
       # Step 5: Install Forge CLI globally
       - name: Set Forge Usage Analytics
