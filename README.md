@@ -65,3 +65,7 @@ Prod
 ### domian
 
 jschub.atlassian.net
+
+```
+forge logs -e production --since 2d
+```

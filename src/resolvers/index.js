@@ -253,7 +253,7 @@ const addVersionComment = async (pageId, rejectComment) => {
         const v1GetRes = await requestConfluenceWithRetry(
             () =>
                 api
-                    .asUser()
+                    .asApp()
                     .requestConfluence(
                         route`/wiki/rest/api/content/${pageId}?expand=body.storage,version,space,ancestors`,
                     ),
@@ -272,7 +272,7 @@ const addVersionComment = async (pageId, rejectComment) => {
             const v1PutRes = await requestConfluenceWithRetry(
                 () =>
                     api
-                        .asUser()
+                        .asApp()
                         .requestConfluence(
                             route`/wiki/rest/api/content/${pageId}`,
                             {
@@ -358,7 +358,7 @@ const addVersionComment = async (pageId, rejectComment) => {
         const v2GetRes = await requestConfluenceWithRetry(
             () =>
                 api
-                    .asUser()
+                    .asApp()
                     .requestConfluence(
                         route`/wiki/api/v2/pages/${pageId}?body-format=storage&include-version=true`,
                     ),
@@ -385,7 +385,7 @@ const addVersionComment = async (pageId, rejectComment) => {
         const v2PutRes = await requestConfluenceWithRetry(
             () =>
                 api
-                    .asUser()
+                    .asApp()
                     .requestConfluence(route`/wiki/api/v2/pages/${pageId}`, {
                         method: "PUT",
                         headers: {
@@ -465,7 +465,7 @@ const getAllPageStates = async (spaceKey) => {
         const res = await requestConfluenceWithRetry(
             () =>
                 api
-                    .asUser()
+                    .asApp()
                     .requestConfluence(
                         route`/wiki/rest/api/space/${spaceKey}/state/settings`,
                     ),
@@ -490,7 +490,7 @@ const getPageStatus = async (pageId) => {
         const res = await requestConfluenceWithRetry(
             () =>
                 api
-                    .asUser()
+                    .asApp()
                     .requestConfluence(
                         route`/wiki/rest/api/content/${pageId}/state`,
                     ),
@@ -521,7 +521,7 @@ const changePageStatus = async ({ payload }) => {
         const res = await requestConfluenceWithRetry(
             () =>
                 api
-                    .asUser()
+                    .asApp()
                     .requestConfluence(
                         route`/wiki/rest/api/content/${pageId}/state?status=current`,
                         {
