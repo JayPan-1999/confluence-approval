@@ -120,7 +120,7 @@ resolver.define("approve", async ({ payload, context }) => {
     const originState = data?.contentState?.name;
     const curState = handleStatusChange(originState, "approve")?.newStatus;
     const accountId = context?.accountId;
-    const authorName = await getCurrentUser(accountId);
+    const { displayName: authorName } = await getCurrentUser(accountId);
     await changePageStatus({
         payload: {
             pageId: contentId,
@@ -153,7 +153,7 @@ resolver.define("reject", async ({ payload, context }) => {
     const originState = data?.contentState?.name;
     const curState = handleStatusChange(originState, "reject")?.newStatus;
     const accountId = context?.accountId;
-    const authorName = await getCurrentUser(accountId);
+    const actor = await getCurrentUser(accountId);
     await changePageStatus({
         payload: {
             pageId: contentId,
@@ -170,6 +170,7 @@ resolver.define("reject", async ({ payload, context }) => {
         versionCommentResult = await addVersionComment(
             contentId,
             rejectComment,
+            actor,
         );
     }
 
@@ -178,7 +179,7 @@ resolver.define("reject", async ({ payload, context }) => {
         contentId,
         spaceKey,
         originState,
-        authorName,
+        actor.displayName,
         pageUrl,
     );
 
@@ -193,22 +194,40 @@ resolver.define("reject", async ({ payload, context }) => {
     return decisionResult;
 });
 
-// 获取当前用户名
+// 获取当前操作者的信息。
+// 这里使用 asApp，避免 Guest 用户因为没有页面编辑权限而无法查询自己的资料。
 const getCurrentUser = async (accountId) => {
+    const fallbackUser = {
+        displayName: "Unknown user",
+        accountId: accountId || "unknown",
+    };
+
+    if (!accountId) {
+        return fallbackUser;
+    }
+
     const res = await requestConfluenceWithRetry(
         () =>
             api
-                .asUser()
+                .asApp()
                 .requestConfluence(
                     route`/wiki/rest/api/user?accountId=${accountId}&expand=details`,
                 ),
         "getCurrentUser",
     );
     if (!res.ok) {
-        throw new Error(`Failed to get user: ${res.status} ${res.statusText}`);
+        console.warn(
+            `Failed to get user profile: ${res.status} ${res.statusText}`,
+        );
+        return fallbackUser;
     }
+
     const user = await res.json();
-    return user.displayName;
+    return {
+        displayName:
+            user.displayName || user.publicName || fallbackUser.displayName,
+        accountId: user.accountId || accountId,
+    };
 };
 
 // 新增 re-review 按钮触发
@@ -218,7 +237,7 @@ resolver.define("re-review", async ({ payload, context }) => {
     const originState = data?.contentState?.name;
     const curState = handleStatusChange(originState, "re-review")?.newStatus;
     const accountId = context?.accountId;
-    const authorName = await getCurrentUser(accountId);
+    const { displayName: authorName } = await getCurrentUser(accountId);
     await changePageStatus({
         payload: {
             pageId: contentId,
@@ -244,10 +263,13 @@ resolver.define("re-review", async ({ payload, context }) => {
  *
  * @param {string} pageId - 页面 ID
  * @param {string} rejectComment - 拒绝理由
+ * @param {{displayName: string, accountId: string}} actor - 实际执行操作的用户
  */
-const addVersionComment = async (pageId, rejectComment) => {
+const addVersionComment = async (pageId, rejectComment, actor) => {
     try {
-        const versionMessage = `[Rejected] ${rejectComment}`;
+        const actorName = actor?.displayName || "Unknown user";
+        const actorAccountId = actor?.accountId || "unknown";
+        const versionMessage = `[Rejected by ${actorName} | accountId: ${actorAccountId}] ${rejectComment}`;
 
         // 先走 v1 content 接口。老页面这条链路通常更稳。
         const v1GetRes = await requestConfluenceWithRetry(
