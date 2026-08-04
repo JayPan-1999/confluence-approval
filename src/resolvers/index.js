@@ -120,7 +120,7 @@ resolver.define("approve", async ({ payload, context }) => {
     const originState = data?.contentState?.name;
     const curState = handleStatusChange(originState, "approve")?.newStatus;
     const accountId = context?.accountId;
-    const { displayName: authorName } = await getCurrentUser(accountId);
+    const actor = await getCurrentUser(accountId);
     await changePageStatus({
         payload: {
             pageId: contentId,
@@ -129,14 +129,29 @@ resolver.define("approve", async ({ payload, context }) => {
             buttonType: "approve",
         },
     });
-    return sendDecision(
+    const versionCommentResult = await addVersionComment(
+        contentId,
+        "approve",
+        actor,
+    );
+    const decisionResult = await sendDecision(
         "approve",
         contentId,
         spaceKey,
         originState,
-        authorName,
+        actor.displayName,
         pageUrl,
     );
+
+    if (versionCommentResult.status === "error") {
+        return {
+            ...decisionResult,
+            status: "error",
+            message: `Approve succeeded, but version history comment was not written: ${versionCommentResult.message}`,
+        };
+    }
+
+    return decisionResult;
 });
 
 // 获取当前状态
@@ -169,8 +184,9 @@ resolver.define("reject", async ({ payload, context }) => {
     if (rejectComment) {
         versionCommentResult = await addVersionComment(
             contentId,
-            rejectComment,
+            "reject",
             actor,
+            rejectComment,
         );
     }
 
@@ -237,7 +253,7 @@ resolver.define("re-review", async ({ payload, context }) => {
     const originState = data?.contentState?.name;
     const curState = handleStatusChange(originState, "re-review")?.newStatus;
     const accountId = context?.accountId;
-    const { displayName: authorName } = await getCurrentUser(accountId);
+    const actor = await getCurrentUser(accountId);
     await changePageStatus({
         payload: {
             pageId: contentId,
@@ -246,30 +262,53 @@ resolver.define("re-review", async ({ payload, context }) => {
             buttonType: "re-review",
         },
     });
-    return sendDecision(
+    const versionCommentResult = await addVersionComment(
+        contentId,
+        "re-review",
+        actor,
+    );
+    const decisionResult = await sendDecision(
         "re-review",
         contentId,
         spaceKey,
         originState,
-        authorName,
+        actor.displayName,
         pageUrl,
     );
+
+    if (versionCommentResult.status === "error") {
+        return {
+            ...decisionResult,
+            status: "error",
+            message: `Submit for Internal Review succeeded, but version history comment was not written: ${versionCommentResult.message}`,
+        };
+    }
+
+    return decisionResult;
 });
 
 /**
- * 将拒绝理由写入页面版本历史（Version History）
+ * 将审批操作写入页面版本历史（Version History）
  * 通过 PUT 更新页面内容并设置 version.message 来实现
  * Confluence 的 version history 会记录每次内容变更时的 version.message
  *
  * @param {string} pageId - 页面 ID
- * @param {string} rejectComment - 拒绝理由
+ * @param {"approve"|"reject"|"re-review"} action - 审批操作
  * @param {{displayName: string, accountId: string}} actor - 实际执行操作的用户
+ * @param {string} comment - 拒绝理由（仅 reject 使用）
  */
-const addVersionComment = async (pageId, rejectComment, actor) => {
+const addVersionComment = async (pageId, action, actor, comment = "") => {
     try {
         const actorName = actor?.displayName || "Unknown user";
         const actorAccountId = actor?.accountId || "unknown";
-        const versionMessage = `[Rejected by ${actorName} | accountId: ${actorAccountId}] ${rejectComment}`;
+        const actionMessages = {
+            approve: `Approved by ${actorName}`,
+            reject: `Rejected by ${actorName}`,
+            "re-review": `Submitted for Internal Review by ${actorName}`,
+        };
+        const actionMessage = actionMessages[action] || `Action by ${actorName}`;
+        const commentSuffix = comment ? ` ${comment}` : "";
+        const versionMessage = `${actionMessage} | accountId: ${actorAccountId}${commentSuffix}`;
 
         // 先走 v1 content 接口。老页面这条链路通常更稳。
         const v1GetRes = await requestConfluenceWithRetry(
